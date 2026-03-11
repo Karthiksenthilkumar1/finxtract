@@ -151,28 +151,79 @@ async def upload_pdf_data(file: UploadFile = File(...), current_user: models.Use
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
-        # Extract and Analyze
-        data = processor.get_extracted_data(file_path)
-        if data is None:
-            logger.warning(f"No financial patterns detected in: {file.filename}")
-            raise HTTPException(
-                status_code=422, 
-                detail="No financial data detected. Please ensure you are uploading a standard Balance Sheet or Profit & Loss statement."
-            )
-            
-        # Generate Strategic AI Summary
-        ai_summary = ai_analyzer.generate_summary(data)
-        
-        logger.info(f"Neural mapping and AI analysis complete for: {file.filename}")
-        return {
-            "data": data,
-            "summary": ai_summary
-        }
-        
     except Exception as e:
-        logger.error(f"Error in /upload-pdf-data: {str(e)}")
-        raise e
+        logger.error(f"Could not save uploaded file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save the uploaded file.")
+    
+    # Extract — always returns something, never raises
+    result = processor.get_extracted_data(file_path)
+    
+    warning = result.pop("warning", None)
+    data = result
+
+    has_data = any(len(rows) > 0 for rows in data.values())
+    
+    if has_data:
+        ai_summary = ai_analyzer.generate_summary(data)
+        logger.info(f"Neural mapping and AI analysis complete for: {file.filename}")
+    else:
+        ai_summary = warning or (
+            "No readable financial data found. "
+            "This document may contain scanned images or unsupported formatting."
+        )
+        logger.warning(f"No extractable data in: {file.filename}")
+    
+    return {
+        "data": data,
+        "summary": ai_summary
+    }
+
+@app.post("/download-excel")
+async def download_excel(request: Request, current_user: models.User = Depends(get_current_user)):
+    """
+    Accepts extracted data as JSON and returns a downloadable Excel file.
+    The frontend sends the data it already has — no re-upload needed.
+    """
+    try:
+        body = await request.json()
+        data = body.get("data", {})
+
+        import io
+        import openpyxl
+        from fastapi.responses import StreamingResponse
+
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)  # remove the default blank sheet
+
+        sheets = {
+            "Balance Sheet": data.get("Balance Sheet", []),
+            "Profit and Loss": data.get("Profit and Loss", []),
+        }
+
+        for sheet_name, rows in sheets.items():
+            ws = wb.create_sheet(title=sheet_name)
+            ws.append(["Description", "Value"])  # Header row
+            for row in rows:
+                ws.append([row.get("Description", ""), row.get("Value", "")])
+
+        # Stream directly from memory — no temp file needed
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        filename = "Finxtract_Export.xlsx"
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers
+        )
+
+    except Exception as e:
+        logger.error(f"Excel download error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate Excel file.")
 
 @app.get("/health")
 def health_check():

@@ -28,7 +28,7 @@ function Dashboard() {
         const storedAggregate = JSON.parse(localStorage.getItem('aggregateInsights'));
         const storedTimeline = JSON.parse(localStorage.getItem('financialTimeline')) || [];
         const storedSummary = JSON.parse(localStorage.getItem('aiSummary'));
-        
+
         setStats(storedStats);
         setActivity(storedActivity);
         setLastExtracted(storedAggregate);
@@ -38,8 +38,10 @@ function Dashboard() {
 
     return (
         <div className="page-container">
+
+            {/* ── Page Header ── */}
             <header className="page-header">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div className="dash-header-row">
                     <div>
                         <h2>Intelligence Hub</h2>
                         <p>Advanced monitoring of your autonomous extraction pipeline</p>
@@ -51,7 +53,8 @@ function Dashboard() {
                 </div>
             </header>
 
-            <div className="stats-grid">
+            {/* ── Overview Cards (Top Row) ── */}
+            <section className="dash-overview-grid">
                 <StatCard
                     title="Total Processed"
                     value={stats.totalProcessed}
@@ -76,40 +79,60 @@ function Dashboard() {
                     color="slate"
                     icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
                 />
-            </div>
+            </section>
 
-            <div className="dashboard-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem', marginTop: '2rem' }}>
-                <div className="main-stats-col" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    <ExecutiveSummary summary={aiSummary} />
-                    <AIInsight data={lastExtracted} />
-                    <TrendChart data={timeline} />
+            {/* ── Main Content: Graph (70%) + Portfolio Panel (30%) ── */}
+            <section className="dash-main-grid">
+
+                {/* Graph Section — left, 70% */}
+                <div className="dash-graph-col">
+                    <div className="dash-card">
+                        <ExecutiveSummary summary={aiSummary} />
+                    </div>
+                    <div className="dash-card dash-chart-card">
+                        <TrendChart data={timeline} />
+                    </div>
                 </div>
 
-                <section className="recent-activity glass" style={{ height: 'fit-content' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h3>Recent Activity</h3>
-                        <span style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))' }}>Real-time updates</span>
+                {/* Portfolio Intelligence Panel — right, 30% */}
+                <div className="dash-portfolio-col">
+                    <div className="dash-card dash-portfolio-card">
+                        <div className="portfolio-header">
+                            <h3>Portfolio Intelligence</h3>
+                            <span className="insight-badge">LIVE</span>
+                        </div>
+                        <AIInsight data={lastExtracted} />
                     </div>
-                    <div className="activity-list">
-                        {activity.length > 0 ? (
-                            activity.map((item, index) => (
-                                <div key={index} className="activity-item">
-                                    <div className="activity-info">
-                                        <span className="file-name" style={{ fontWeight: 600, display: 'block', marginBottom: '2px' }}>{item.name}</span>
-                                        <span className="file-date" style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.date}</span>
+
+                    <div className="dash-card dash-activity-card">
+                        <div className="portfolio-header" style={{ marginBottom: '1.5rem' }}>
+                            <h3>Recent Activity</h3>
+                            <span style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))' }}>Real-time</span>
+                        </div>
+                        <div className="activity-list">
+                            {activity.length > 0 ? (
+                                activity.map((item, index) => (
+                                    <div key={index} className="activity-item">
+                                        <div className="activity-info">
+                                            <span className="file-name" style={{ fontWeight: 600, display: 'block', marginBottom: '2px' }}>{item.name}</span>
+                                            <span className="file-date" style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.date}</span>
+                                        </div>
+                                        <div className="activity-actions">
+                                            <div className="activity-status success">Done</div>
+                                            <Link to="/results" className="action-link">View →</Link>
+                                        </div>
                                     </div>
-                                    <div className="activity-actions">
-                                        <div className="activity-status success">Structured</div>
-                                        <Link to="/results" className="action-link">View Analysis →</Link>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="empty-msg">No recent activity found. Start by uploading a financial PDF.</p>
-                        )}
+                                ))
+                            ) : (
+                                <p className="empty-msg" style={{ color: 'hsl(var(--text-muted))', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 0' }}>
+                                    No activity yet. Upload a financial PDF to get started.
+                                </p>
+                            )}
+                        </div>
                     </div>
-                </section>
-            </div>
+                </div>
+
+            </section>
         </div>
     );
 }

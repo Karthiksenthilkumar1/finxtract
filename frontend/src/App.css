@@ -789,11 +789,118 @@ h1, h2, h3, .logo-text {
   min-height: 250px;
 }
 
-/* Responsive */
+/* =========================================
+   Dashboard Layout — CSS Grid
+   ========================================= */
+
+/* Header row with title + status badge */
+.dash-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* ── Overview Cards: 4 in a row ── */
+.dash-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+/* ── Main Content: Graph (70%) + Portfolio (30%) ── */
+.dash-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.75rem;
+  align-items: start;
+}
+
+/* Left graph column */
+.dash-graph-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+/* Right portfolio column */
+.dash-portfolio-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+/* Generic dashboard card */
+.dash-card {
+  background: hsl(var(--bg-surface));
+  border: 1px solid hsla(var(--glass-border));
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  box-shadow: var(--shadow-lg);
+  transition: var(--transition);
+}
+
+.dash-card:hover {
+  border-color: hsla(var(--primary) / 0.25);
+}
+
+/* Chart card gets a bit more padding */
+.dash-chart-card {
+  padding: 1.5rem;
+}
+
+/* Portfolio card header row */
+.portfolio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.portfolio-header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* =========================================
+   Responsive Breakpoints
+   ========================================= */
+
+/* Tablet: 4-col cards → 2-col, graph+portfolio → stack */
+@media (max-width: 1100px) {
+  .dash-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .dash-overview-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Mobile: everything stacks */
 @media (max-width: 768px) {
   .nav-container { padding: 0 1.5rem; }
   .page-container { padding: 0 1.5rem; margin-top: 1.5rem; }
   .upload-section, .login-card { padding: 2rem; }
   .nav-links { gap: 1rem; }
   .nav-item { font-size: 0.85rem; }
+
+  .dash-overview-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .dash-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .dash-header-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dash-overview-grid {
+    grid-template-columns: 1fr;
+  }
 }

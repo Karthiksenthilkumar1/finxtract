@@ -16,17 +16,33 @@ function Results({ data, lastFileName }) {
     }
 
     const handleDownload = async () => {
-        // Note: In a real app, we'd send the file again or have a persistent session
-        // For this demo, we can't easily re-upload the same 'File' object without storing it
-        // But we can trigger the same logic if the user re-uploads or we just mock the link
-        // Here we'll show a "Simulated Download" for the class project if actual file object is lost,
-        // OR try to fetch from backend if the file is still in 'uploads/' (backend keeps it)
-
         setDownloading(true);
         try {
-            // Assuming the backend still has the last file or we provide the name
-            const response = await axios.get('http://localhost:8000/health'); // Just a check
-            alert('In a production system, this would trigger the Excel download for: ' + lastFileName);
+            const token = localStorage.getItem('token');
+            const response = await axios.post(
+                'http://localhost:8000/download-excel',
+                { data },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    responseType: 'blob', // Important: treat response as binary
+                }
+            );
+
+            // Create a temporary link and trigger download
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'Finxtract_Export.xlsx');
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Download failed:', err);
+            alert('Failed to download Excel file. Please try again.');
         } finally {
             setDownloading(false);
         }

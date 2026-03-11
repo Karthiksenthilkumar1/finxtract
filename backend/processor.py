@@ -2,171 +2,138 @@ import os
 import re
 import pdfplumber
 import pandas as pd
-from typing import List, Dict
+from typing import List, Dict, Optional
+
 
 class FinancialProcessor:
-    def __init__(self):
-        # Weighted keywords for more intelligent classification
-        self.bs_keywords = {
-            "balance sheet": 10,
-            "statement of financial position": 10,
-            "assets": 3,
-            "liabilities": 3,
-            "equity": 3,
-            "net assets": 5
-        }
-        self.pl_keywords = {
-            "profit and loss": 10,
-            "income statement": 10,
-            "statement of operations": 10,
-            "revenue": 3,
-            "expenses": 3,
-            "net income": 5,
-            "ebitda": 5
-        }
-        
+    """
+    "Process Anything" pipeline.
+    No classification. No keyword thresholds.
+    Aggressively extracts any text+number patterns from every page.
+    """
+
     def process_pdf(self, pdf_path: str, output_dir: str) -> str:
         extracted_data = self._extract_content(pdf_path)
         return self._save_to_excel(extracted_data, output_dir)
-    
-    def get_extracted_data(self, pdf_path: str) -> Dict[str, List[Dict[str, str]]]:
-        extracted_data = self._extract_content(pdf_path)
-        if extracted_data is None:
-            return None
-            
-        return {
-            sheet: df.to_dict(orient="records")
-            for sheet, df in extracted_data.items()
-        }
-    
-    def _classify_page(self, text: str) -> str:
-        text_lower = text.lower()
-        bs_score = sum(weight for kw, weight in self.bs_keywords.items() if kw in text_lower)
-        pl_score = sum(weight for kw, weight in self.pl_keywords.items() if kw in text_lower)
-        
-        if bs_score > 8 and bs_score >= pl_score:
-            return "BS"
-        if pl_score > 8 and pl_score > bs_score:
-            return "PL"
-        return None
 
-    def _extract_content(self, pdf_path: str) -> Dict[str, pd.DataFrame]:
-        bs_data = []
-        pl_data = []
-        
-        with pdfplumber.open(pdf_path) as pdf:
-            for i, page in enumerate(pdf.pages):
-                text = page.extract_text()
-                if not text:
-                    continue
-                
-                category = self._classify_page(text)
-                if not category:
-                    continue
-                
-                # Intelligent table/text parsing
-                page_data = self._parse_intelligent(page)
-                
-                if category == "BS":
-                    bs_data.extend(page_data)
-                elif category == "PL":
-                    pl_data.extend(page_data)
-        
-        if not bs_data and not pl_data:
-            return None
-            
-        # Group data and attempt to handle multiple columns (years) if present
-        df_bs = self._finalize_dataframe(bs_data)
-        df_pl = self._finalize_dataframe(pl_data)
-
-        # Basic Accounting Validation (internal meta, could be used later)
-        self._validate_accounting(df_bs)
-        
-        return {
-            "Balance Sheet": df_bs,
-            "Profit and Loss": df_pl
-        }
-
-    def _parse_intelligent(self, page) -> List[Dict]:
-        extracted = []
-        tables = page.extract_tables()
-        
-        # Detect year headers
-        headers = []
-        if tables:
-            first_table = tables[0]
-            if first_table and len(first_table[0]) > 1:
-                potential_headers = [str(cell).strip() for cell in first_table[0]]
-                headers = [h for h in potential_headers if re.search(r"(20\d{2})|Current|Prior", h)]
-
-        if tables:
-            for table in tables:
-                for row in table:
-                    if not row or len(row) < 2: continue
-                    desc = str(row[0]).strip()
-                    if not desc or len(desc) < 3: continue
-                    
-                    # Try to find the values
-                    for i in range(1, len(row)):
-                        val = str(row[i]).strip()
-                        if self._is_numeric(val):
-                            year = headers[i-1] if len(headers) >= i else "Latest"
-                            extracted.append({"Description": desc, "Value": val, "Year": year})
-                            # We collect all values, but _finalize_dataframe will pick the best
-        
-        if not extracted:
-            text = page.extract_text()
-            regex = r"([A-Za-z\s]{3,})\s+([\d,.-]+\d{2})"
-            matches = re.finditer(regex, text)
-            for match in matches:
-                extracted.append({"Description": match.group(1).strip(), "Value": match.group(2).strip(), "Year": "Latest"})
-                    
-        return extracted
-
-    def _finalize_dataframe(self, data: List[Dict]) -> pd.DataFrame:
-        if not data:
-            return pd.DataFrame(columns=["Description", "Value"])
-        df = pd.DataFrame(data)
-        # Prioritize 'Latest' or highest year
-        if 'Year' in df.columns:
-            df['YearOrder'] = df['Year'].apply(lambda x: int(x) if re.match(r"20\d{2}", str(x)) else (9999 if str(x).lower() == 'latest' else 0))
-            df = df.sort_values(by='YearOrder', ascending=False)
-            
-        df = df.drop_duplicates(subset=["Description"])
-        return df[["Description", "Value"]]
-
-    def _validate_accounting(self, df: pd.DataFrame) -> Dict:
-        # Simple A = L + E check logic
+    def get_extracted_data(self, pdf_path: str) -> Dict:
+        """
+        Returns a dict with 'Balance Sheet', 'Profit and Loss' and optional 'warning'.
+        Never returns None — always returns something.
+        """
         try:
-            assets = self._sum_by_desc(df, ["total assets", "total non-current assets", "total current assets"])
-            liabilities = self._sum_by_desc(df, ["total liabilities", "total equity", "liabilities and equity"])
-            return {"balanced": abs(assets - liabilities) < 10.0} # Small margin for rounding
-        except:
-            return {"balanced": False}
+            return self._extract_content(pdf_path)
+        except Exception as e:
+            return {
+                "Balance Sheet": [],
+                "Profit and Loss": [],
+                "warning": f"Could not read this file: {str(e)}"
+            }
 
-    def _sum_by_desc(self, df: pd.DataFrame, keywords: List[str]) -> float:
-        mask = df['Description'].str.lower().str.contains('|'.join(keywords))
-        vals = df[mask]['Value'].apply(lambda x: float(str(x).replace(',', '').replace('(', '-').replace(')', '')) if self._is_numeric(x) else 0)
-        return vals.sum()
+    def _extract_content(self, pdf_path: str) -> Dict:
+        all_records = []
+
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                for page in pdf.pages:
+                    try:
+                        text = page.extract_text()
+                        if text:
+                            records = self._extract_from_text(text)
+                            all_records.extend(records)
+                    except Exception:
+                        # Skip unreadable pages silently
+                        continue
+        except Exception as e:
+            return {
+                "Balance Sheet": [],
+                "Profit and Loss": [],
+                "warning": f"Could not open PDF: {str(e)}"
+            }
+
+        if not all_records:
+            return {
+                "Balance Sheet": [],
+                "Profit and Loss": [],
+                "warning": (
+                    "No readable financial data found. "
+                    "This document may contain scanned images or unsupported formatting."
+                )
+            }
+
+        # De-duplicate by description (keep first occurrence)
+        seen = set()
+        unique_records = []
+        for r in all_records:
+            key = r["Description"].strip().lower()
+            if key not in seen:
+                seen.add(key)
+                unique_records.append({"Description": r["Description"], "Value": r["Value"]})
+
+        # Return same data for both sheets so the UI always has content
+        return {
+            "Balance Sheet": unique_records,
+            "Profit and Loss": unique_records,
+        }
+
+    def _extract_from_text(self, text: str) -> List[Dict]:
+        """
+        Line-by-line extraction.
+        Accepts any line that has BOTH text and a numeric value at the end.
+        """
+        records = []
+        # Matches: anything (description), then whitespace, then a number (possibly with commas, parens, dashes)
+        regex = re.compile(r"^(.*?)\s+([-$()0-9][0-9,.()\s$-]*)$")
+
+        for raw_line in text.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            match = regex.match(line)
+            if not match:
+                continue
+
+            description = match.group(1).strip()
+            value_raw = match.group(2).strip()
+
+            # Description must contain at least one letter
+            if not re.search(r"[A-Za-z]", description):
+                continue
+
+            # Value must be parseable as a number
+            if not self._is_numeric(value_raw):
+                continue
+
+            records.append({
+                "Description": description,
+                "Value": value_raw,
+                "Year": "Latest"
+            })
+
+        return records
 
     def _is_numeric(self, s: str) -> bool:
-        if not s: return False
-        s = s.replace(",", "").replace("-", "").replace("(", "").replace(")", "").strip()
+        if not s:
+            return False
+        # Normalize: remove currency symbols, commas, parentheses (negatives), spaces
+        cleaned = re.sub(r"[$,\s]", "", s)
+        cleaned = cleaned.replace("(", "-").replace(")", "")
         try:
-            float(s)
+            float(cleaned)
             return True
         except ValueError:
             return False
 
-    def _save_to_excel(self, data_dict: Dict[str, pd.DataFrame], output_dir: str) -> str:
+    def _save_to_excel(self, data_dict: Dict, output_dir: str) -> str:
         filename = "Financial_Statement_Extracted.xlsx"
         output_path = os.path.join(output_dir, filename)
-        
+
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-            for sheet_name, df in data_dict.items():
-                if not df.empty:
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-                else:
-                    pd.DataFrame(columns=["Description", "Value"]).to_excel(writer, sheet_name=sheet_name, index=False)
-                    
+            for sheet_name in ["Balance Sheet", "Profit and Loss"]:
+                rows = data_dict.get(sheet_name, [])
+                df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Description", "Value"])
+                df = df[["Description", "Value"]] if not df.empty else df
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
         return output_path
